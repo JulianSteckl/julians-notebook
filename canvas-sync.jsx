@@ -63,8 +63,6 @@ function CanvasSetupModal({ onClose }) {
 
   function handleDisconnect() {
     nbSetCanvasConfig(null);
-    if (!__nbStore) return;
-    window.__nbStore_canvasData = null;
     window.dispatchEvent(new Event("nbStoreChange"));
     onClose();
   }
