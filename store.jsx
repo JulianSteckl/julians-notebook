@@ -568,17 +568,17 @@ function nbBumpWeekStat(key, by = 1) {
   __nbNotify();
 }
 
-// Patch nbToggleHomework to award XP and bump weekly stat
-const _origToggle = nbToggleHomework;
-function nbToggleHomework(id) {
+// Wrap nbToggleHomework to award XP and bump weekly stat
+const _nbToggleHomeworkBase = nbToggleHomework;
+nbToggleHomework = function(id) {
   const before = [...HOMEWORK, ...(__nbStore.homework || [])].find(h => h.id === id);
-  _origToggle(id);
+  _nbToggleHomeworkBase(id);
   const after = [...HOMEWORK, ...(__nbStore.homework || [])].find(h => h.id === id);
   if (after && after.done && !(before && before.done)) {
     nbAddXP(15, "Completed homework");
     nbBumpWeekStat("hwDone");
   }
-}
+};
 
 Object.assign(window, {
   nbGetCanvasConfig, nbSetCanvasConfig, nbGetCanvasData, nbSyncCanvas,
