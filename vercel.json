@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "api/canvas.js": { "runtime": "nodejs18.x" }
+  },
+  "rewrites": [
+    { "source": "/api/canvas", "destination": "/api/canvas" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}

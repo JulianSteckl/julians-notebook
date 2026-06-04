@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Julian's Notebook</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Notebook">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a1611">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="animations.css" />
+
+<style>
+  html, body { background: var(--bg); height: 100%; margin: 0; }
+  #root { height: 100vh; }
+</style>
+</head>
+<body style="font-family: &quot;Times New Roman&quot;">
+<div id="root"></div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script>
+  try {
+    firebase.initializeApp({
+      apiKey: "AIzaSyBpWumrjTMdKporWBdey2jgI2tYaoZnG_s",
+      authDomain: "julians-notebook.firebaseapp.com",
+      databaseURL: "https://julians-notebook-default-rtdb.firebaseio.com",
+      projectId: "julians-notebook",
+      storageBucket: "julians-notebook.firebasestorage.app",
+      messagingSenderId: "457994811490",
+      appId: "1:457994811490:web:84740161fa7ac289d3393b"
+    });
+    window.__fbAuth = firebase.auth();
+    window.__fbDb = firebase.database();
+    window.__fbGoogleProvider = firebase.auth.GoogleAuthProvider;
+  } catch(e) { console.warn("Firebase init failed:", e); }
+</script>
+
+<script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>if (window.pdfjsLib) { pdfjsLib.GlobalWorkerOptions.workerSrc = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js"; }</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="onboarding.jsx?v=3"></script>
+<script type="text/babel" src="tweaks-panel.jsx?v=3"></script>
+<script type="text/babel" src="data.jsx?v=3"></script>
+<script type="text/babel" src="store.jsx?v=3"></script>
+<script type="text/babel" src="shell.jsx?v=4"></script>
+<script type="text/babel" src="visuals.jsx?v=2"></script>
+<script type="text/babel" src="dashboard.jsx?v=3"></script>
+<script type="text/babel" src="homework.jsx?v=3"></script>
+<script type="text/babel" src="subjects.jsx?v=3"></script>
+<script type="text/babel" src="quizzes.jsx?v=3"></script>
+<script type="text/babel" src="views.jsx?v=3"></script>
+<script type="text/babel" src="subject-overview.jsx?v=3"></script>
+<script type="text/babel" src="mobile.jsx?v=3"></script>
+<script type="text/babel" src="interactions.jsx?v=4"></script>
+<script src="animations.jsx?v=1"></script>
+<script type="text/babel" src="college.jsx?v=1"></script>
+<script type="text/babel" src="music-player.jsx?v=1"></script>
+<script type="text/babel" src="canvas-sync.jsx?v=1"></script>
+
+<script type="text/babel" data-presets="env,react">
+/* global DashCombined, DashFocus, DashTimeline, HomeworkContent, HomeworkDetailPage,
+          SubjectsContent, NoteContent, QuizzesContent, TakeQuiz, QuizDetailPage,
+          ScheduleContent, GradesContent, FlashcardsContent, NotesIndexContent,
+          Sidebar, Topbar, ApiKeyModal,
+          TweaksPanel, useTweaks, TweakSection, TweakRadio, TweakColor */
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#a07830",
+  "density": "default",
+  "homeVariant": "combined",
+  "subjectView": "cards",
+  "displayFont": "Source Serif 4"
+}/*EDITMODE-END*/;
+
+function parseRoute() {
+  const h = (window.location.hash || "#/").replace(/^#\/?/, "");
+  if (!h) return { view: "dashboard" };
+  const parts = h.split("/");
+  const [first, ...rest] = parts;
+  if (first === "subject" && rest[0]) {
+    const sub = rest[1] || "overview";
+    return { view: "subject", id: rest[0], sub, noteId: rest[2] };
+  }
+  if (first === "quiz" && rest[0]) return { view: "quiz", quizType: rest[0], deckId: rest[1] };
+  if (first === "homework" && rest[0]) return { view: "homework-detail", id: rest[0] };
+  if (first === "quiz-detail" && rest[0]) return { view: "quiz-detail", id: rest[0] };
+  return { view: first };
+}
+
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [route, setRoute] = React.useState(parseRoute());
+  const [profile, setProfile] = React.useState(() => nbGetProfile());
+
+  const handleOnboardingComplete = (p) => {
+    setProfile(p);
+    // Push profile to Firebase immediately so other devices get it right away
+    if (window.nbSyncNow) window.nbSyncNow();
+    // Reload so SUBJECTS re-evaluates from localStorage
+    window.location.reload();
+  };
+  const [cmdkOpen, setCmdkOpen] = React.useState(false);
+  const [quickAdd, setQuickAdd] = React.useState(null);
+  const [aiOpen, setAiOpen] = React.useState(false);
+  const [scheduleEditorOpen, setScheduleEditorOpen] = React.useState(false);
+  const [manageSubjectsOpen, setManageSubjectsOpen] = React.useState(false);
+  const [apiKeyOpen, setApiKeyOpen] = React.useState(false);
+  const [canvasOpen, setCanvasOpen] = React.useState(false);
+  const [weeklyReportOpen, setWeeklyReportOpen] = React.useState(false);
+  const [whatToDoOpen, setWhatToDoOpen] = React.useState(false);
+  const [levelUpInfo, setLevelUpInfo] = React.useState(null);
+  const [hasApiKey, setHasApiKey] = React.useState(() => !!nbGetApiKey());
+  const [fbUser, setFbUser] = React.useState(null);
+  const [authReady, setAuthReady] = React.useState(!window.__fbAuth);
+
+  React.useEffect(() => {
+    if (!window.__fbAuth) { setAuthReady(true); return; }
+    const unsub = window.__fbAuth.onAuthStateChanged(user => {
+      setFbUser(user);
+      window.__fbCurrentUser = user;
+      window.dispatchEvent(new CustomEvent("fbUserChanged", { detail: user }));
+      if (window.nbSetFirebaseUser) window.nbSetFirebaseUser(user);
+      setAuthReady(true);
+    });
+    return unsub;
+  }, []);
+
+  // When Firebase loads a different profile (different subjects), reload so data.jsx picks it up
+  React.useEffect(() => {
+    const onLoaded = (e) => {
+      if (e.detail.profileChanged) {
+        // Give the store a moment to finish writing, then reload
+        setTimeout(() => window.location.reload(), 80);
+      }
+    };
+    window.addEventListener("nbFirebaseLoaded", onLoaded);
+    return () => window.removeEventListener("nbFirebaseLoaded", onLoaded);
+  }, []);
+
+  const [signInError, setSignInError] = React.useState("");
+  const handleSignIn = () => {
+    setSignInError("");
+    if (!window.__fbAuth || !window.__fbGoogleProvider) {
+      setSignInError("Auth not ready — reload the page and try again.");
+      return;
+    }
+    const provider = new window.__fbGoogleProvider();
+    window.__fbAuth.signInWithPopup(provider).catch(e => {
+      setSignInError(e.message || "Sign-in failed");
+    });
+  };
+  const handleSignOut = () => window.__fbAuth?.signOut();
+
+  React.useEffect(() => {
+    const onHash = () => setRoute(parseRoute());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCmdkOpen((v) => !v);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n" && !e.shiftKey) {
+        e.preventDefault();
+        setQuickAdd("homework");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  React.useEffect(() => {
+    const onQuickAdd = (e) => setQuickAdd((e.detail && e.detail.type) || "homework");
+    const onPrint = () => window.print();
+    const onPlan = () => setQuickAdd("homework");
+    const onSchedule = () => setScheduleEditorOpen(true);
+    const onManageSubjects = () => setManageSubjectsOpen(true);
+    const onOpenApiKey = () => setApiKeyOpen(true);
+    const onApiKeyChanged = () => setHasApiKey(!!nbGetApiKey());
+    window.addEventListener("openQuickAdd", onQuickAdd);
+    window.addEventListener("printWeek", onPrint);
+    window.addEventListener("planTomorrow", onPlan);
+    window.addEventListener("openScheduleEditor", onSchedule);
+    window.addEventListener("openManageSubjects", onManageSubjects);
+    window.addEventListener("openApiKeyModal", onOpenApiKey);
+    window.addEventListener("apiKeyChanged", onApiKeyChanged);
+    // XP level-up listener
+    const onLevelUp = (e) => setLevelUpInfo(e.detail);
+    window.addEventListener("xpLevelUp", onLevelUp);
+    return () => {
+      window.removeEventListener("openQuickAdd", onQuickAdd);
+      window.removeEventListener("printWeek", onPrint);
+      window.removeEventListener("planTomorrow", onPlan);
+      window.removeEventListener("openScheduleEditor", onSchedule);
+      window.removeEventListener("openManageSubjects", onManageSubjects);
+      window.removeEventListener("openApiKeyModal", onOpenApiKey);
+      window.removeEventListener("apiKeyChanged", onApiKeyChanged);
+      window.removeEventListener("xpLevelUp", onLevelUp);
+    };
+  }, []);
+
+  // Weekly Report Card — show on Mondays (or first open after Sunday)
+  React.useEffect(() => {
+    const lastShown = localStorage.getItem("nb-weekly-report-shown");
+    const today = new Date();
+    const weekKey = (() => { const d = new Date(today); d.setDate(d.getDate() - d.getDay()); return d.toISOString().slice(0,10); })();
+    if (lastShown !== weekKey && today.getDay() === 1) { // Monday
+      setTimeout(() => setWeeklyReportOpen(true), 2000);
+      localStorage.setItem("nb-weekly-report-shown", weekKey);
+    }
+  }, []);
+
+  const go = (key) => {
+    if (key.startsWith("subject:")) {
+      window.location.hash = "#/subject/" + key.slice(8);
+    } else if (key.startsWith("quiz/")) {
+      window.location.hash = "#/" + key;
+    } else if (key === "dashboard") {
+      window.location.hash = "#/";
+    } else {
+      window.location.hash = "#/" + key;
+    }
+  };
+
+  // Compute sidebar active key from current route
+  let sidebarActive = "dashboard";
+  if (route.view === "subject") sidebarActive = route.id;
+  else if (route.view === "homework") sidebarActive = "homework";
+  else if (route.view === "quizzes" || route.view === "quiz") sidebarActive = "quizzes";
+  else if (route.view === "notes") sidebarActive = "notes";
+  else if (route.view === "flashcards") sidebarActive = "cards";
+  else if (route.view === "schedule") sidebarActive = "schedule";
+  else if (route.view === "grades") sidebarActive = "grades";
+  else if (route.view === "college") sidebarActive = "college";
+  else if (route.view === "subjects") sidebarActive = "";
+
+  // Decide if content area needs special styling (note editor takes over the area)
+  const isNote = route.view === "subject" && route.sub === "notes";
+  const isQuiz = route.view === "quiz";
+
+  // Per-subject accent tint when viewing a subject
+  const subjectAccent = route.view === "subject" && route.id ? (subjectBy(route.id)?.color) : null;
+  const effectiveAccent = subjectAccent || tweaks.accent;
+
+  const accentStyle = `
+    :root {
+      --accent: ${effectiveAccent} !important;
+      --accent-soft: ${hexAlpha(effectiveAccent, 0.22)} !important;
+      --accent-ink: ${darken(effectiveAccent, 0.28)} !important;
+      --f-display: "${tweaks.displayFont}", Georgia, serif !important;
+    }
+  `;
+
+  // Get the note text for the AI helper (when in notes view)
+  const noteForAI = React.useMemo(() => {
+    if (!isNote) return { title: "", text: "", subject: "" };
+    const subj = subjectBy(route.id);
+    const notes = notesForSubject(route.id);
+    const active = (route.noteId && notes.find((n) => n.id === route.noteId)) || notes[0];
+    if (!active) return { title: "", text: "", subject: subj?.short || "" };
+    const text = (active.blocks || []).map((b) => b.text).join("\n");
+    return { title: active.title, text, subject: subj?.short || "" };
+  }, [isNote, route.id, route.noteId]);
+
+  if (!profile) {
+    return (
+      <>
+        <style>{accentStyle}</style>
+        <Onboarding onComplete={handleOnboardingComplete} />
+      </>
+    );
+  }
+
+  // Mobile layout for phones
+  if (window.innerWidth < 768) {
+    return (
+      <>
+        <style>{accentStyle}</style>
+        <MobileApp />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <style>{accentStyle}</style>
+      <div className={`sn-root density-${tweaks.density}`} style={{ height: "100%" }}>
+        <div className="sn-app">
+          <Sidebar active={sidebarActive} onNav={go} />
+          <main className="sn-main">
+            <Topbar
+              placeholder={
+                route.view === "subject" ? "Search in this subject…" :
+                route.view === "homework" ? "Search homework…" :
+                route.view === "notes" ? "Search all notes…" :
+                "Search notes, homework, quizzes…"
+              }
+              onSearchClick={() => setCmdkOpen(true)}
+              onPlusClick={() => setQuickAdd("homework")}
+              onSignOut={handleSignOut}
+              extras={
+                <>
+                  <button
+                    className="sn-btn"
+                    onClick={() => setWhatToDoOpen(true)}
+                    title="What should I work on right now?"
+                    style={{ fontSize: 12, padding: "5px 11px", borderColor: "var(--hairline)", color: "var(--ink-2)", display: "flex", alignItems: "center", gap: 5 }}
+                  >
+                    <span style={{ fontSize: 13 }}>🎯</span> What to do?
+                  </button>
+                  <PomodoroChip />
+                  <CanvasTopbarButton onOpen={() => setCanvasOpen(true)} />
+                  <button
+                    className="sn-btn ghost"
+                    onClick={() => setApiKeyOpen(true)}
+                    title={hasApiKey ? "AI connected — click to manage key" : "Connect Claude AI"}
+                    style={{
+                      fontSize: 12, padding: "5px 10px",
+                      borderColor: hasApiKey ? "var(--accent)" : "var(--hairline)",
+                      color: hasApiKey ? "var(--accent)" : "var(--ink-3)",
+                      display: "flex", alignItems: "center", gap: 5,
+                    }}
+                  >
+                    <span style={{ fontFamily: "var(--f-display)", fontStyle: "italic" }}>✦</span>
+                    {hasApiKey ? "AI on" : "Connect AI"}
+                    {hasApiKey && <span style={{ width: 6, height: 6, borderRadius: 3, background: "var(--accent)", flexShrink: 0 }}></span>}
+                  </button>
+                  {isNote && (
+                    <button className="sn-btn" onClick={() => setAiOpen(true)} style={{ borderColor: "var(--accent)", color: "var(--accent-ink)", background: "var(--accent-soft)" }}>
+                      <span style={{ fontFamily: "var(--f-display)", fontStyle: "italic", marginRight: 2 }}>✦</span> AI helper
+                    </button>
+                  )}
+                  {authReady && !fbUser && (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                      <button className="sn-btn" onClick={handleSignIn} style={{ fontSize: 12, padding: "5px 12px", display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                        </svg>
+                        Sign in with Google
+                      </button>
+                      {signInError && <div style={{ fontSize: 10.5, color: "var(--accent)", fontFamily: "var(--f-mono)", maxWidth: 220, textAlign: "right" }}>{signInError}</div>}
+                    </div>
+                  )}
+                </>
+              }
+            />
+            <div className="sn-content" style={
+              isNote ? { padding: 0, display: "flex" } :
+              isQuiz ? { padding: 0 } :
+              route.view === "homework-detail" ? { padding: 0, display: "flex", overflow: "hidden" } :
+              undefined
+            }>
+              {(isNote || isQuiz || route.view === "homework-detail") ? (
+                <RouteView route={route} go={go} tweaks={tweaks} setTweak={setTweak} onOpenCanvas={() => setCanvasOpen(true)} />
+              ) : (
+                <div className="route-transition" key={route.view + ":" + (route.id || "") + ":" + (route.sub || "")}>
+                  <RouteView route={route} go={go} tweaks={tweaks} setTweak={setTweak} onOpenCanvas={() => setCanvasOpen(true)} />
+                </div>
+              )}
+            </div>
+          </main>
+        </div>
+      </div>
+
+      {cmdkOpen && (
+        <CommandPalette
+          onClose={() => setCmdkOpen(false)}
+          onNav={go}
+          onOpenQuickAdd={(t) => setQuickAdd(t)}
+        />
+      )}
+      {quickAdd && (
+        <QuickAdd
+          initialType={quickAdd}
+          onClose={() => setQuickAdd(null)}
+        />
+      )}
+      {aiOpen && isNote && (
+        <AIHelper
+          noteTitle={noteForAI.title}
+          noteText={noteForAI.text}
+          subjectShort={noteForAI.subject}
+          onClose={() => setAiOpen(false)}
+        />
+      )}
+      {scheduleEditorOpen && (
+        <ScheduleEditor onClose={() => setScheduleEditorOpen(false)} />
+      )}
+      {manageSubjectsOpen && (
+        <ManageSubjectsModal onClose={() => setManageSubjectsOpen(false)} />
+      )}
+      {apiKeyOpen && (
+        <ApiKeyModal onClose={() => setApiKeyOpen(false)} />
+      )}
+      {canvasOpen && (
+        <CanvasSetupModal onClose={() => setCanvasOpen(false)} />
+      )}
+      {weeklyReportOpen && (
+        <WeeklyReportModal onClose={() => setWeeklyReportOpen(false)} />
+      )}
+      {whatToDoOpen && (
+        <WhatToDoModal onClose={() => setWhatToDoOpen(false)} onNav={go} />
+      )}
+      {levelUpInfo && (
+        <LevelUpModal info={levelUpInfo} onClose={() => setLevelUpInfo(null)} />
+      )}
+
+      <MusicPlayer />
+      <ToastHost />
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Color">
+          <TweakColor
+            label="Accent"
+            value={tweaks.accent}
+            onChange={(v) => setTweak("accent", v)}
+            options={["#c8694a", "#3f7d8a", "#7a4e6e", "#6b8e5a"]}
+          />
+        </TweakSection>
+
+        <TweakSection label="Typography">
+          <TweakRadio
+            label="Display font"
+            value={tweaks.displayFont}
+            onChange={(v) => setTweak("displayFont", v)}
+            options={[
+              { value: "Source Serif 4", label: "Serif" },
+              { value: "Instrument Serif", label: "Editorial" },
+              { value: "Geist", label: "Sans" },
+            ]}
+          />
+        </TweakSection>
+
+        <TweakSection label="Layout">
+          <TweakRadio
+            label="Density"
+            value={tweaks.density}
+            onChange={(v) => setTweak("density", v)}
+            options={[
+              { value: "compact", label: "Compact" },
+              { value: "default", label: "Default" },
+              { value: "roomy", label: "Roomy" },
+            ]}
+          />
+          <TweakRadio
+            label="Subjects view"
+            value={tweaks.subjectView}
+            onChange={(v) => setTweak("subjectView", v)}
+            options={[
+              { value: "cards", label: "Cards" },
+              { value: "list", label: "List" },
+            ]}
+          />
+        </TweakSection>
+
+        <TweakSection label="Home screen">
+          <TweakRadio
+            label="Variant"
+            value={tweaks.homeVariant}
+            onChange={(v) => setTweak("homeVariant", v)}
+            options={[
+              { value: "combined", label: "All-in-one" },
+              { value: "focus", label: "Focus" },
+              { value: "timeline", label: "Timeline" },
+            ]}
+          />
+        </TweakSection>
+      </TweaksPanel>
+    </>
+  );
+}
+
+function RouteView({ route, go, tweaks, setTweak, onOpenCanvas }) {
+  switch (route.view) {
+    case "dashboard":
+    case "":
+      if (tweaks.homeVariant === "focus")    return <DashFocus view={tweaks.subjectView} />;
+      if (tweaks.homeVariant === "timeline") return <DashTimeline view={tweaks.subjectView} />;
+      return <DashCombined view={tweaks.subjectView} />;
+    case "homework":
+      return <HomeworkContent onOpenCanvas={onOpenCanvas} />;
+    case "homework-detail":
+      return <HomeworkDetailPage hwId={route.id} />;
+    case "quizzes":
+      return <QuizzesContent onTakeQuiz={(t, deckId) => go("quiz/" + t + (deckId ? "/" + deckId : ""))} />;
+    case "quiz":
+      return <TakeQuiz type={route.quizType} deckId={route.deckId} onExit={() => go("quizzes")} />;
+    case "quiz-detail":
+      return <QuizDetailPage quizId={route.id} />;
+    case "notes":
+      return <NotesIndexContent
+        onOpenSubject={(id) => go("subject:" + id)}
+        onOpenNote={(id, noteId) => { window.location.hash = "#/subject/" + id + "/notes" + (noteId ? "/" + noteId : ""); }}
+      />;
+    case "subjects":
+      return <SubjectsContent
+        view={tweaks.subjectView}
+        onOpenSubject={(id) => go("subject:" + id)}
+        onChangeView={(v) => setTweak("subjectView", v)}
+      />;
+    case "subject":
+      if (route.sub === "notes") return <NoteContent subjectId={route.id} noteId={route.noteId} />;
+      return <SubjectOverviewContent
+        subjectId={route.id}
+        onOpenNotes={(id, noteId) => window.location.hash = "#/subject/" + id + "/notes" + (noteId ? "/" + noteId : "")}
+        onOpenQuiz={(t, deckId) => go("quiz/" + t + (deckId ? "/" + deckId : ""))}
+        onOpenHomework={() => go("homework")}
+      />;
+    case "schedule":
+      return <ScheduleContent />;
+    case "grades":
+      return <GradesContent />;
+    case "college":
+      return <CollegeContent />;
+    case "flashcards":
+      return <FlashcardsContent onTakeQuiz={(t, deckId) => go("quiz/" + t + (deckId ? "/" + deckId : ""))} />;
+    default:
+      return <NotFound go={go} />;
+  }
+}
+
+function NotFound({ go }) {
+  return (
+    <div style={{ textAlign: "center", padding: "80px 0" }}>
+      <div style={{ fontFamily: "var(--f-display)", fontSize: 64, color: "var(--ink-3)" }}>404</div>
+      <div style={{ fontFamily: "var(--f-display)", fontStyle: "italic", fontSize: 22, color: "var(--ink-2)", marginTop: 8 }}>That page isn't in this notebook.</div>
+      <button className="sn-btn primary" style={{ marginTop: 24 }} onClick={() => go("dashboard")}>← Back to today</button>
+    </div>
+  );
+}
+
+// ── Weekly Report Card Modal ─────────────────────────────────────────────────
+function WeeklyReportModal({ onClose }) {
+  const stats = typeof nbGetWeekStats === "function" ? nbGetWeekStats() : {};
+  const streak = typeof nbGetStreak === "function" ? nbGetStreak() : 0;
+  const xp = typeof nbGetXP === "function" ? nbGetXP() : null;
+  const allHw = [...(typeof HOMEWORK !== "undefined" ? HOMEWORK : []), ...(typeof nbGetHomework === "function" ? nbGetHomework() : [])];
+  const doneCount = allHw.filter(h => h.done).length;
+
+  const items = [
+    { emoji: "✅", label: "Homework completed", value: stats.hwDone || doneCount || 0 },
+    { emoji: "📝", label: "Notes written", value: stats.notesWritten || 0 },
+    { emoji: "🧠", label: "Quizzes studied", value: stats.quizzesDone || 0 },
+    { emoji: "🔥", label: "Day streak", value: streak },
+    xp ? { emoji: "⭐", label: "Total XP earned", value: xp.total + " XP" } : null,
+  ].filter(Boolean);
+
+  const msgs = ["You're building great habits.", "Keep the momentum going.", "Consistency beats intensity.", "Another week in the books.", "Every task done is a step closer."];
+  const msg = msgs[new Date().getDay() % msgs.length];
+
+  return (
+    <div className="sn-modal-backdrop heavy-blur" style={{ position:"fixed",inset:0,zIndex:500,display:"flex",alignItems:"center",justifyContent:"center" }} onClick={onClose}>
+      <div className="sn-modal-spring-bottom sn-card" style={{ width:420,maxWidth:"90vw",padding:32,borderRadius:12 }} onClick={e=>e.stopPropagation()}>
+        <div style={{ fontFamily:"var(--f-mono)",fontSize:10,color:"var(--ink-3)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:8 }}>
+          Weekly Report — {new Date().toLocaleDateString("en-US",{month:"long",day:"numeric"})}
+        </div>
+        <div style={{ fontFamily:"var(--f-display)",fontSize:30,lineHeight:1.1,marginBottom:4 }}>
+          How was <em>your week?</em>
+        </div>
+        <div style={{ fontFamily:"var(--f-display)",fontStyle:"italic",color:"var(--ink-2)",fontSize:15,marginBottom:24 }}>{msg}</div>
+        <div style={{ display:"flex",flexDirection:"column",gap:10,marginBottom:24 }}>
+          {items.map((it,i) => (
+            <div key={i} style={{ display:"flex",alignItems:"center",gap:14,padding:"10px 14px",background:"var(--bg-2)",borderRadius:7,border:"1px solid var(--hairline)" }}>
+              <span style={{ fontSize:20 }}>{it.emoji}</span>
+              <span style={{ flex:1,fontFamily:"var(--f-ui)",fontSize:13.5,color:"var(--ink-2)" }}>{it.label}</span>
+              <span style={{ fontFamily:"var(--f-display)",fontSize:22,color:"var(--ink)" }}>{it.value}</span>
+            </div>
+          ))}
+        </div>
+        <button className="sn-btn primary" style={{ width:"100%",justifyContent:"center",fontSize:13 }} onClick={onClose}>
+          Start the new week →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── What To Do Modal ─────────────────────────────────────────────────────────
+function WhatToDoModal({ onClose, onNav }) {
+  const [rec, setRec] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const allHw = [...(typeof HOMEWORK !== "undefined" ? HOMEWORK : []), ...(typeof nbGetHomework === "function" ? nbGetHomework() : [])].filter(h => !h.done);
+    const quizzes = typeof QUIZZES_UPCOMING !== "undefined" ? QUIZZES_UPCOMING : [];
+    const hour = new Date().getHours();
+    const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+
+    // Rule-based recommendation
+    const urgent = allHw.filter(h => h.urgent);
+    const soonQuiz = quizzes.sort((a,b) => (a.confidence||1)-(b.confidence||1))[0];
+
+    let pick = null;
+    if (urgent.length > 0) {
+      pick = { type:"homework", item: urgent[0], reason: "It's due soon and can't wait." };
+    } else if (soonQuiz && (soonQuiz.confidence||1) < 0.6) {
+      pick = { type:"quiz", item: soonQuiz, reason: `You're only ${Math.round((soonQuiz.confidence||0.5)*100)}% confident — perfect time to study.` };
+    } else if (allHw.length > 0) {
+      const byEst = allHw.sort((a,b) => {
+        const mins = s => { if(!s||s==="—") return 60; const m=s.match(/(\d+)h/); const n=s.match(/(\d+)m/); return (m?parseInt(m[1])*60:0)+(n?parseInt(n[1]):0)||30; };
+        return mins(a.est) - mins(b.est);
+      });
+      pick = { type:"homework", item: byEst[0], reason: timeOfDay === "morning" ? "Start your day with a quick win." : timeOfDay === "afternoon" ? "Good time to knock out homework." : "Clear this before tomorrow." };
+    } else {
+      pick = { type:"free", reason:"You're all caught up! Maybe review notes or do some flashcard practice." };
+    }
+
+    setTimeout(() => { setRec(pick); setLoading(false); }, 600);
+  }, []);
+
+  const subj = rec && rec.item && rec.item.subject ? (typeof subjectBy === "function" ? subjectBy(rec.item.subject) : null) : null;
+
+  return (
+    <div className="sn-modal-backdrop heavy-blur" style={{ position:"fixed",inset:0,zIndex:500,display:"flex",alignItems:"center",justifyContent:"center" }} onClick={onClose}>
+      <div className="sn-modal-spring-bottom sn-card" style={{ width:400,maxWidth:"90vw",padding:28,borderRadius:12 }} onClick={e=>e.stopPropagation()}>
+        <div style={{ fontFamily:"var(--f-mono)",fontSize:10,color:"var(--ink-3)",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:12 }}>
+          🎯 Right Now
+        </div>
+        {loading ? (
+          <div style={{ textAlign:"center",padding:"24px 0",fontFamily:"var(--f-display)",fontStyle:"italic",color:"var(--ink-3)",fontSize:16 }}>
+            Thinking…
+          </div>
+        ) : rec && rec.type === "free" ? (
+          <>
+            <div style={{ fontFamily:"var(--f-display)",fontSize:26,lineHeight:1.2,marginBottom:10 }}>You're <em>all caught up!</em> 🎉</div>
+            <div style={{ fontFamily:"var(--f-ui)",color:"var(--ink-2)",fontSize:14,lineHeight:1.6,marginBottom:20 }}>{rec.reason}</div>
+            <div style={{ display:"flex",gap:8 }}>
+              <button className="sn-btn" onClick={() => { onNav("flashcards"); onClose(); }} style={{ flex:1,justifyContent:"center",fontSize:12 }}>Study flashcards</button>
+              <button className="sn-btn ghost" onClick={onClose} style={{ fontSize:12 }}>Close</button>
+            </div>
+          </>
+        ) : rec ? (
+          <>
+            <div style={{ fontFamily:"var(--f-display)",fontSize:24,lineHeight:1.2,marginBottom:6 }}>
+              Work on <em>{rec.item.title || rec.item.title}</em>
+            </div>
+            {subj && <div style={{ display:"flex",alignItems:"center",gap:6,marginBottom:10 }}><span style={{ width:8,height:8,borderRadius:2,background:subj.color,flexShrink:0 }}></span><span style={{ fontFamily:"var(--f-mono)",fontSize:11,color:"var(--ink-3)" }}>{subj.short}</span>{rec.item.est && rec.item.est!=="—" && <span style={{ fontFamily:"var(--f-mono)",fontSize:11,color:"var(--ink-3)" }}>· est. {rec.item.est}</span>}</div>}
+            <div style={{ fontFamily:"var(--f-display)",fontStyle:"italic",color:"var(--ink-2)",fontSize:15,lineHeight:1.5,borderLeft:"2px solid var(--accent)",paddingLeft:12,marginBottom:20 }}>{rec.reason}</div>
+            <div style={{ display:"flex",gap:8 }}>
+              <button className="sn-btn primary" onClick={() => { onNav(rec.type==="quiz"?"quizzes":"homework"); onClose(); }} style={{ flex:1,justifyContent:"center",fontSize:12 }}>
+                {rec.type==="quiz" ? "Go study →" : "Open homework →"}
+              </button>
+              <button className="sn-btn ghost" onClick={onClose} style={{ fontSize:12 }}>Later</button>
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// ── Level Up Modal ───────────────────────────────────────────────────────────
+function LevelUpModal({ info, onClose }) {
+  React.useEffect(() => { const t = setTimeout(onClose, 5000); return () => clearTimeout(t); }, []);
+  return (
+    <div style={{ position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",zIndex:600,pointerEvents:"none" }}>
+      <div className="sn-modal-spring-bottom" style={{
+        background:"var(--ink)",color:"var(--bg)",borderRadius:12,padding:"18px 28px",
+        display:"flex",alignItems:"center",gap:16,minWidth:300,
+        boxShadow:"0 8px 32px rgba(20,16,11,0.28)",
+        pointerEvents:"auto", cursor:"pointer",
+      }} onClick={onClose}>
+        <span style={{ fontSize:32 }}>{info.badge}</span>
+        <div>
+          <div style={{ fontFamily:"var(--f-mono)",fontSize:10,textTransform:"uppercase",letterSpacing:"0.14em",opacity:0.6,marginBottom:3 }}>Level up!</div>
+          <div style={{ fontFamily:"var(--f-display)",fontSize:20 }}>Level {info.level} — <em>{info.title}</em></div>
+          <div style={{ fontFamily:"var(--f-mono)",fontSize:11,opacity:0.65,marginTop:2 }}>{info.total} XP total</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- color helpers ---
+function hexAlpha(hex, a) {
+  const { r, g, b } = parseHex(hex);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function darken(hex, amt) {
+  let { r, g, b } = parseHex(hex);
+  r = Math.round(r * (1 - amt));
+  g = Math.round(g * (1 - amt));
+  b = Math.round(b * (1 - amt));
+  return `rgb(${r},${g},${b})`;
+}
+function parseHex(hex) {
+  const m = hex.replace("#", "");
+  return { r: parseInt(m.slice(0, 2), 16), g: parseInt(m.slice(2, 4), 16), b: parseInt(m.slice(4, 6), 16) };
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+
+</body>
+</html>

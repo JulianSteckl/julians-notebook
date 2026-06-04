@@ -1,0 +1,565 @@
+/* School Notebook — Motion & Delight Layer
+   ─────────────────────────────────────────
+   Goal: every transition should feel like ink settling into paper,
+   not a UI panel snapping into place. One easing language, one
+   timing scale, no abrupt jumps.
+*/
+
+/* ───────────────────────────────────────────────────────────────
+   0. Motion tokens
+   Single source of truth for durations + easings so the whole
+   app moves in one voice.
+*/
+:root {
+  /* durations */
+  --m-fast: 180ms;
+  --m-base: 280ms;
+  --m-slow: 460ms;
+  --m-page: 560ms;
+
+  /* easings — out-quint feels the silkiest for "settling" motion */
+  --e-out:   cubic-bezier(0.22, 1, 0.36, 1);          /* out-quint */
+  --e-out-soft: cubic-bezier(0.16, 1, 0.3, 1);        /* out-expo-ish, very silky */
+  --e-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --e-spring-soft: cubic-bezier(0.22, 1.06, 0.36, 1); /* almost no overshoot */
+}
+
+/* ───────────────────────────────────────────────────────────────
+   1. Smooth accent color crossfade
+   When --accent changes (subject switch, tweak), interpolate via
+   @property registration instead of swapping abruptly.
+*/
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #a07830;
+}
+@property --accent-soft {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f0e8d5;
+}
+@property --accent-ink {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #604a18;
+}
+:root {
+  transition:
+    --accent var(--m-slow) var(--e-out),
+    --accent-soft var(--m-slow) var(--e-out),
+    --accent-ink var(--m-slow) var(--e-out);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   2. Page transition — a slow drift into focus
+   The wrapper itself fades; children drift in individually via §7.
+*/
+.route-transition {
+  animation: route-enter 700ms var(--e-out-soft) both;
+  will-change: opacity, transform, filter;
+  transform-origin: 50% 0%;
+}
+@keyframes route-enter {
+  0%   { opacity: 0; transform: translateY(12px); filter: blur(3px); }
+  45%  { filter: blur(0); }
+  100% { opacity: 1; transform: none; filter: blur(0); }
+}
+
+.route-transition.leaving {
+  animation: route-leave 260ms var(--e-out-soft) both;
+}
+@keyframes route-leave {
+  to { opacity: 0; transform: translateY(-6px); filter: blur(2px); }
+}
+
+/* Topbar settles in along with the page */
+.sn-topbar {
+  animation: topbar-in 700ms var(--e-out-soft) both;
+}
+@keyframes topbar-in {
+  from { opacity: 0; transform: translateY(-6px); filter: blur(2px); }
+  to   { opacity: 1; transform: none; filter: blur(0); }
+}
+
+/* Sidebar items also drift in with a soft cascade */
+.sn-sidebar .sn-nav-item {
+  animation: nav-flow-in 700ms var(--e-out-soft) both;
+}
+.sn-sidebar .sn-nav-item:nth-child(1) { animation-delay: 60ms; }
+.sn-sidebar .sn-nav-item:nth-child(2) { animation-delay: 110ms; }
+.sn-sidebar .sn-nav-item:nth-child(3) { animation-delay: 155ms; }
+.sn-sidebar .sn-nav-item:nth-child(4) { animation-delay: 195ms; }
+.sn-sidebar .sn-nav-item:nth-child(5) { animation-delay: 230ms; }
+.sn-sidebar .sn-nav-item:nth-child(6) { animation-delay: 260ms; }
+.sn-sidebar .sn-nav-item:nth-child(7) { animation-delay: 285ms; }
+.sn-sidebar .sn-nav-item:nth-child(n+8) { animation-delay: 305ms; }
+@keyframes nav-flow-in {
+  from { opacity: 0; transform: translateX(-10px); filter: blur(2px); }
+  to   { opacity: 1; transform: none; filter: blur(0); }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   3. Sidebar — sliding pill indicator
+   Single soft curve, slightly longer so the slide feels deliberate.
+*/
+.sn-sidebar { position: relative; }
+.sn-nav-item {
+  position: relative;
+  z-index: 1;
+  transition:
+    color var(--m-base) var(--e-out),
+    transform var(--m-base) var(--e-out);
+}
+.sn-nav-item:hover { transform: translateX(1px); }
+
+.sn-sidebar .sn-nav-item.active,
+.sn-sidebar .sn-nav-item.active[style*="background"] {
+  background: transparent !important;
+}
+
+.sn-nav-pill {
+  position: absolute;
+  border-radius: 5px;
+  z-index: 0;
+  pointer-events: none;
+  transition:
+    top 460ms var(--e-out-soft),
+    height 460ms var(--e-out-soft),
+    left 460ms var(--e-out-soft),
+    width 460ms var(--e-out-soft),
+    background-color var(--m-slow) var(--e-out),
+    opacity 200ms ease;
+  box-shadow:
+    0 1px 0 rgba(0,0,0,0.05),
+    0 6px 14px -6px rgba(60,40,15,0.18);
+}
+.sn-nav-pill.entering {
+  opacity: 0;
+  transition: none;
+}
+
+/* ───────────────────────────────────────────────────────────────
+   4. Homework checkmark — gentler pop, softer ring
+*/
+.hw-check {
+  position: relative;
+  overflow: visible;
+}
+.hw-check::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ink);
+  opacity: 0;
+  transform: scale(0.7);
+  pointer-events: none;
+}
+.hw-check.done {
+  animation: check-pop 520ms var(--e-spring-soft);
+}
+.hw-check.done::after {
+  animation: check-ring 720ms var(--e-out-soft);
+}
+@keyframes check-pop {
+  0%   { transform: scale(0.92); }
+  55%  { transform: scale(1.10); }
+  100% { transform: scale(1.06); }
+}
+@keyframes check-ring {
+  0%   { opacity: 0.42; transform: scale(0.8); }
+  100% { opacity: 0; transform: scale(2.0); }
+}
+
+/* Row settles after toggle — no horizontal jolt, just a fade tint */
+.hw-row {
+  transition:
+    background-color var(--m-base) var(--e-out),
+    transform var(--m-base) var(--e-out),
+    opacity var(--m-base) var(--e-out),
+    color var(--m-base) var(--e-out);
+}
+.hw-row.just-completed {
+  animation: row-complete 900ms var(--e-out-soft);
+}
+@keyframes row-complete {
+  0%   { background: transparent; }
+  35%  { background: rgba(107, 142, 90, 0.10); }
+  100% { background: transparent; }
+}
+.hw-row.done .hw-title,
+.hw-row.done .hw-meta {
+  transition: color var(--m-base) var(--e-out), opacity var(--m-base) var(--e-out);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   5. Button press ripple — ink spreading on paper
+*/
+.sn-btn {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 140ms var(--e-out),
+    border-color var(--m-base) var(--e-out),
+    background-color var(--m-base) var(--e-out),
+    color var(--m-base) var(--e-out),
+    box-shadow var(--m-base) var(--e-out);
+}
+.sn-btn:hover { transform: translateY(-0.5px); }
+.sn-btn:active { transform: scale(0.975); }
+
+.sn-ripple {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: scale(0);
+  background: currentColor;
+  opacity: 0.18;
+  animation: ripple-spread 620ms var(--e-out-soft) forwards;
+  mix-blend-mode: multiply;
+}
+.sn-btn.primary .sn-ripple,
+.sn-btn.accent .sn-ripple {
+  background: rgba(255,255,255,0.55);
+  mix-blend-mode: screen;
+  opacity: 0.45;
+}
+@keyframes ripple-spread {
+  0%   { transform: scale(0); opacity: 0.32; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   6. Card hover lift — cushioned, no snap
+*/
+.sn-card {
+  transition:
+    transform 360ms var(--e-out-soft),
+    box-shadow 360ms var(--e-out-soft),
+    border-color 360ms var(--e-out);
+  will-change: transform;
+}
+.sn-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 1px rgba(26,22,17,0.02) inset,
+    0 1px 0 0 rgba(216,207,190,0.9),
+    0 3px 0 0 var(--rule),
+    0 22px 40px -18px rgba(60,40,15,0.20);
+}
+
+/* Subject cards — soft accent shimmer sweep on hover */
+.subj-card {
+  position: relative;
+  isolation: isolate;
+}
+.subj-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    var(--c, var(--accent)) 50%,
+    transparent 70%
+  );
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+  transform: translateX(-30%);
+  transition: opacity 340ms var(--e-out);
+  mix-blend-mode: overlay;
+}
+.subj-card:hover::after {
+  opacity: 0.16;
+  animation: subj-shimmer 1.6s var(--e-out-soft);
+}
+.subj-card > * { position: relative; z-index: 1; }
+@keyframes subj-shimmer {
+  0%   { transform: translateX(-60%); }
+  100% { transform: translateX(60%); }
+}
+
+/* Generic interactive list rows */
+.hw-row,
+.sn-list-row,
+.note-row {
+  transition:
+    background-color var(--m-base) var(--e-out),
+    color var(--m-base) var(--e-out),
+    transform var(--m-base) var(--e-out);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   7. Flowy entrance — every visible item drifts up into focus.
+   `--flow-i` is set on each element by animations.jsx based on its
+   document order within the route, so the cascade reads as a single
+   wave from top-left → bottom-right regardless of nesting depth.
+*/
+.route-transition .sn-card,
+.route-transition .hw-row,
+.route-transition .sn-list-row,
+.route-transition .note-row,
+.route-transition .subj-card,
+.route-transition .quiz-row,
+.route-transition .grade-row,
+.route-transition .sched-day,
+.route-transition .schedule-block,
+.route-transition .week-day,
+.route-transition .flash-card,
+.route-transition .recent-note,
+.route-transition [data-flow-item] {
+  will-change: opacity, transform, filter;
+}
+
+/* Hold the hidden start-state until JS assigns --flow-i (data-flowed).
+   This prevents the animation from starting with a default index of 0
+   on every item (which makes them all land at once). */
+.route-transition .sn-card:not([data-flowed]),
+.route-transition .hw-row:not([data-flowed]),
+.route-transition .sn-list-row:not([data-flowed]),
+.route-transition .note-row:not([data-flowed]),
+.route-transition .subj-card:not([data-flowed]),
+.route-transition .quiz-row:not([data-flowed]),
+.route-transition .grade-row:not([data-flowed]),
+.route-transition .sched-day:not([data-flowed]),
+.route-transition .schedule-block:not([data-flowed]),
+.route-transition .week-day:not([data-flowed]),
+.route-transition .flash-card:not([data-flowed]),
+.route-transition .recent-note:not([data-flowed]),
+.route-transition [data-flow-item]:not([data-flowed]) {
+  opacity: 0;
+  transform: translateY(22px);
+  filter: blur(4px);
+}
+
+/* Once flowed, run the drift with the per-item delay */
+.route-transition .sn-card[data-flowed],
+.route-transition .hw-row[data-flowed],
+.route-transition .sn-list-row[data-flowed],
+.route-transition .note-row[data-flowed],
+.route-transition .subj-card[data-flowed],
+.route-transition .quiz-row[data-flowed],
+.route-transition .grade-row[data-flowed],
+.route-transition .sched-day[data-flowed],
+.route-transition .schedule-block[data-flowed],
+.route-transition .week-day[data-flowed],
+.route-transition .flash-card[data-flowed],
+.route-transition .recent-note[data-flowed],
+.route-transition [data-flow-item][data-flowed] {
+  animation: flow-enter 900ms var(--e-out-soft) both;
+  animation-delay: calc(var(--flow-i, 0) * 65ms + 80ms);
+}
+
+@keyframes flow-enter {
+  0%   { opacity: 0; transform: translateY(22px); filter: blur(4px); }
+  45%  { filter: blur(0); }
+  100% { opacity: 1; transform: none; filter: blur(0); }
+}
+
+/* Cards drift in slightly larger than rows for a richer feel */
+.route-transition .sn-card:not([data-flowed]) {
+  transform: translateY(28px) scale(0.985);
+  filter: blur(5px);
+}
+.route-transition .sn-card[data-flowed] {
+  animation-name: flow-enter-card;
+  animation-duration: 1000ms;
+}
+@keyframes flow-enter-card {
+  0%   { opacity: 0; transform: translateY(28px) scale(0.985); filter: blur(5px); }
+  40%  { filter: blur(0); }
+  100% { opacity: 1; transform: none; filter: blur(0); }
+}
+
+/* Card-title bars drift in just after their card */
+.route-transition .sn-card-title {
+  animation: title-flow-in 800ms var(--e-out-soft) both;
+  animation-delay: calc(var(--flow-i, 0) * 65ms + 220ms);
+}
+@keyframes title-flow-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Week-strip day cells flow with the same wave */
+.sched-strip .sched-day {
+  animation: flow-enter 700ms var(--e-out-soft) both;
+  animation-delay: calc(var(--flow-i, 0) * 55ms + 120ms);
+}
+
+/* ───────────────────────────────────────────────────────────────
+   8. Streak matrix — soft wave fill
+*/
+.streak-cell {
+  animation: streak-cell-in 540ms var(--e-out-soft) both;
+  animation-delay: calc(var(--i, 0) * 6ms);
+}
+@keyframes streak-cell-in {
+  0%   { opacity: 0; transform: scale(0.7); }
+  100% { opacity: var(--target-opacity, 1); transform: scale(1); }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   9. Skeleton shimmer placeholders
+*/
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-2) 0%,
+    var(--hairline) 50%,
+    var(--bg-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s var(--e-in-out) infinite;
+  border-radius: 3px;
+  color: transparent !important;
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   10. Modal entrance — gentler springs, less bounce
+*/
+.sn-modal-backdrop {
+  animation: modal-backdrop-in 320ms var(--e-out-soft) both;
+}
+@keyframes modal-backdrop-in {
+  from { opacity: 0; backdrop-filter: blur(0px); }
+  to   { opacity: 1; }
+}
+
+.sn-modal-spring-bottom {
+  animation: spring-bottom 520ms var(--e-spring-soft) both;
+}
+@keyframes spring-bottom {
+  0%   { opacity: 0; transform: translateY(36px) scale(0.985); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.sn-modal-drop-top {
+  animation: drop-top 420ms var(--e-out-soft) both;
+}
+@keyframes drop-top {
+  0%   { opacity: 0; transform: translateY(-14px) scale(0.99); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.sn-modal-backdrop.heavy-blur {
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  background: rgba(20, 16, 11, 0.32);
+}
+
+/* Modal close — graceful exit when wrapper gets .leaving */
+.sn-modal-spring-bottom.leaving { animation: spring-bottom-out 240ms var(--e-out-soft) both; }
+.sn-modal-drop-top.leaving      { animation: drop-top-out 220ms var(--e-out-soft) both; }
+.sn-modal-backdrop.leaving      { animation: modal-backdrop-out 240ms var(--e-out-soft) both; }
+@keyframes spring-bottom-out {
+  to { opacity: 0; transform: translateY(20px) scale(0.99); }
+}
+@keyframes drop-top-out {
+  to { opacity: 0; transform: translateY(-10px) scale(0.99); }
+}
+@keyframes modal-backdrop-out {
+  to { opacity: 0; }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   11. Pomodoro chip pulse — slower, more meditative
+*/
+.pomo-pulse {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 5px;
+  animation: pomo-pulse 1.6s var(--e-in-out) infinite;
+  vertical-align: middle;
+}
+@keyframes pomo-pulse {
+  0%, 100% { transform: scale(0.85); opacity: 0.5; }
+  50%      { transform: scale(1.22); opacity: 1; }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   12. Confetti — keep snappy, this one's supposed to feel kinetic
+*/
+.confetti-host {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+}
+.confetti-piece {
+  position: absolute;
+  top: -20px;
+  width: 8px;
+  height: 12px;
+  border-radius: 1px;
+  animation:
+    confetti-fall var(--dur, 2.4s) linear forwards,
+    confetti-spin var(--spin, 1.2s) linear infinite;
+}
+@keyframes confetti-fall {
+  0%   { transform: translate3d(0, -20px, 0) rotate(0deg); opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translate3d(var(--dx, 0), 100vh, 0) rotate(720deg); opacity: 0; }
+}
+@keyframes confetti-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   13. Misc — inputs, chips, links share the same calm timing
+*/
+.sn-input, input, textarea, select {
+  transition:
+    border-color var(--m-base) var(--e-out),
+    background-color var(--m-base) var(--e-out),
+    box-shadow var(--m-base) var(--e-out),
+    color var(--m-base) var(--e-out);
+}
+.sn-chip, .chip, .tag {
+  transition:
+    background-color var(--m-base) var(--e-out),
+    color var(--m-base) var(--e-out),
+    border-color var(--m-base) var(--e-out),
+    transform 160ms var(--e-out);
+}
+.sn-chip:hover, .chip:hover { transform: translateY(-0.5px); }
+
+a {
+  transition: color var(--m-base) var(--e-out), opacity var(--m-base) var(--e-out);
+}
+
+/* Toast — slide up + ease away */
+.sn-toast {
+  animation: toast-in 420ms var(--e-out-soft) both;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.sn-toast.leaving {
+  animation: toast-out 260ms var(--e-out-soft) both;
+}
+@keyframes toast-out {
+  to { opacity: 0; transform: translateY(8px) scale(0.99); }
+}
+
+/* ───────────────────────────────────────────────────────────────
+   14. Reduced motion guard
+*/
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
